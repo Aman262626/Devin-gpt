@@ -517,7 +517,267 @@ def chat_completions():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 # =================================================================
-# 5. Dashboard UI - Grok Style
+# 5. Image Generation API (Multi-Provider with Fallback)
+# =================================================================
+IMAGE_PROVIDERS = [
+    {"name": "pollinations", "base": "https://image.pollinations.ai/prompt"},
+    {"name": "ximagine", "type": "ximagine"},
+]
+
+@app.route('/v1/images/generate', methods=['POST'])
+def generate_image():
+    """
+    Image generation with multi-provider fallback.
+    Provider 1: Pollinations.ai (free, URL-based)
+    Provider 2: Ximagine (existing engine)
+    """
+    body = request.json or {}
+    prompt = body.get("prompt", "").strip()
+    size = body.get("size", "1024x1024")
+    provider = body.get("provider", "auto")
+
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+
+    errors = []
+
+    # --- Provider 1: Pollinations.ai ---
+    if provider in ("auto", "pollinations"):
+        try:
+            encoded_prompt = requests.utils.quote(prompt)
+            w, h = size.split("x") if "x" in size else ("1024", "1024")
+            poll_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={w}&height={h}&nologo=true&seed={random.randint(1, 999999)}"
+            res = requests.head(poll_url, timeout=15, allow_redirects=True)
+            if res.status_code == 200:
+                print(f"[IMG] Pollinations OK: {poll_url}")
+                return jsonify({
+                    "success": True,
+                    "provider": "pollinations",
+                    "data": {
+                        "url": poll_url,
+                        "prompt": prompt,
+                        "size": size
+                    }
+                })
+        except Exception as e:
+            errors.append(f"pollinations: {str(e)}")
+            print(f"[IMG] Pollinations failed: {e}")
+
+    # --- Provider 2: Ximagine ---
+    if provider in ("auto", "ximagine"):
+        try:
+            unique_id = uuid.uuid4().hex
+            headers = XimagineEngine.get_headers(unique_id)
+            payload = {
+                "prompt": prompt,
+                "channel": "GROK_TEXT_IMAGE",
+                "pageId": 901,
+                "source": "ximagine.io",
+                "watermarkFlag": True,
+                "removeWatermark": True,
+                "private": False,
+                "privateFlag": False,
+                "isTemp": True,
+                "model": "grok-imagine",
+                "aspectRatio": "1:1",
+                "imageUrls": []
+            }
+            res = requests.post(
+                f"{CONFIG['API_BASE']}/ai/grok/create",
+                headers=headers, json=payload, timeout=30, verify=False
+            )
+            res_data = res.json()
+            if res_data.get("code") == 200:
+                task_id = res_data["data"]
+                # Poll for result
+                start = time.time()
+                while time.time() - start < 90:
+                    poll = requests.get(
+                        f"{CONFIG['API_BASE']}/ai/{task_id}?channel=GROK_TEXT_IMAGE",
+                        headers=headers, timeout=10, verify=False
+                    ).json()
+                    data = poll.get("data", {})
+                    if data.get("completeData"):
+                        inner = json.loads(data["completeData"])
+                        if inner.get("data", {}).get("result_urls"):
+                            image_url = inner["data"]["result_urls"][0]
+                            print(f"[IMG] Ximagine OK: {image_url}")
+                            return jsonify({
+                                "success": True,
+                                "provider": "ximagine",
+                                "data": {
+                                    "url": image_url,
+                                    "prompt": prompt,
+                                    "size": size
+                                }
+                            })
+                        break
+                    if data.get("failMsg"):
+                        raise Exception(data["failMsg"])
+                    time.sleep(2)
+                else:
+                    raise Exception("Ximagine image generation timed out")
+        except Exception as e:
+            errors.append(f"ximagine: {str(e)}")
+            print(f"[IMG] Ximagine failed: {e}")
+
+    return jsonify({
+        "success": False,
+        "error": "All image providers failed",
+        "details": errors
+    }), 500
+
+@app.route('/v1/images/providers', methods=['GET'])
+def list_image_providers():
+    return jsonify({
+        "providers": [
+            {"id": "pollinations", "name": "Pollinations.ai", "type": "free", "status": "active"},
+            {"id": "ximagine", "name": "Ximagine Engine", "type": "free", "status": "active"},
+        ]
+    })
+
+# =================================================================
+# 6. AI Assistant / Chat API (Multi-Provider with Fallback)
+# =================================================================
+CHAT_PROVIDERS = [
+    {"name": "pollinations", "base": "https://text.pollinations.ai"},
+    {"name": "torgpt", "base": "https://torgpt.space/api/v1/chat"},
+]
+
+@app.route('/v1/assistant/chat', methods=['POST'])
+def assistant_chat():
+    """
+    AI Assistant chat with multi-provider fallback.
+    Provider 1: Pollinations.ai text API (free)
+    Provider 2: TorGPT (free, no key)
+    """
+    body = request.json or {}
+    messages = body.get("messages", [])
+    provider = body.get("provider", "auto")
+    stream = body.get("stream", False)
+
+    if not messages:
+        return jsonify({"error": "messages array is required"}), 400
+
+    last_msg = messages[-1].get("content", "") if messages else ""
+    errors = []
+
+    # --- Provider 1: Pollinations.ai Text ---
+    if provider in ("auto", "pollinations"):
+        try:
+            encoded_prompt = requests.utils.quote(last_msg)
+            system_msg = "You are a helpful AI assistant. Be concise and accurate."
+            res = requests.get(
+                f"https://text.pollinations.ai/{encoded_prompt}?model=openai&system={requests.utils.quote(system_msg)}",
+                timeout=30
+            )
+            if res.status_code == 200 and res.text.strip():
+                reply = res.text.strip()
+                print(f"[CHAT] Pollinations OK: {reply[:80]}")
+                if stream:
+                    def stream_response():
+                        chunk = {
+                            "id": f"chatcmpl-{uuid.uuid4()}",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": "pollinations",
+                            "choices": [{"index": 0, "delta": {"content": reply}, "finish_reason": None}]
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        done_chunk = {
+                            "id": f"chatcmpl-{uuid.uuid4()}",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": "pollinations",
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                        }
+                        yield f"data: {json.dumps(done_chunk)}\n\n"
+                        yield "data: [DONE]\n\n"
+                    return Response(stream_with_context(stream_response()), mimetype='text/event-stream')
+                return jsonify({
+                    "id": f"chatcmpl-{uuid.uuid4()}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": "pollinations",
+                    "provider": "pollinations",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": reply},
+                        "finish_reason": "stop"
+                    }]
+                })
+        except Exception as e:
+            errors.append(f"pollinations: {str(e)}")
+            print(f"[CHAT] Pollinations failed: {e}")
+
+    # --- Provider 2: TorGPT ---
+    if provider in ("auto", "torgpt"):
+        try:
+            res = requests.post(
+                "https://torgpt.space/api/v1/chat",
+                json={"messages": messages},
+                timeout=30
+            )
+            data = res.json()
+            reply = ""
+            if isinstance(data, dict):
+                reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if not reply:
+                    reply = data.get("response", "") or data.get("message", "") or data.get("content", "")
+            if reply:
+                print(f"[CHAT] TorGPT OK: {reply[:80]}")
+                if stream:
+                    def stream_response():
+                        chunk = {
+                            "id": f"chatcmpl-{uuid.uuid4()}",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": "torgpt",
+                            "choices": [{"index": 0, "delta": {"content": reply}, "finish_reason": None}]
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        done_chunk = {
+                            "id": f"chatcmpl-{uuid.uuid4()}",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": "torgpt",
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                        }
+                        yield f"data: {json.dumps(done_chunk)}\n\n"
+                        yield "data: [DONE]\n\n"
+                    return Response(stream_with_context(stream_response()), mimetype='text/event-stream')
+                return jsonify({
+                    "id": f"chatcmpl-{uuid.uuid4()}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": "torgpt",
+                    "provider": "torgpt",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": reply},
+                        "finish_reason": "stop"
+                    }]
+                })
+        except Exception as e:
+            errors.append(f"torgpt: {str(e)}")
+            print(f"[CHAT] TorGPT failed: {e}")
+
+    return jsonify({
+        "error": "All chat providers failed",
+        "details": errors
+    }), 500
+
+@app.route('/v1/assistant/providers', methods=['GET'])
+def list_chat_providers():
+    return jsonify({
+        "providers": [
+            {"id": "pollinations", "name": "Pollinations.ai", "type": "free", "status": "active"},
+            {"id": "torgpt", "name": "TorGPT", "type": "free", "status": "active"},
+        ]
+    })
+
+# =================================================================
+# 7. Dashboard UI - Grok Style
 # =================================================================
 @app.route('/')
 def index():
