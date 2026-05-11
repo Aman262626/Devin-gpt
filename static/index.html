@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XIMAGINE PRO | Video Generation Engine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #141414; --bg-secondary: #1a1a1a; --bg-tertiary: #222; --bg-hover: #2a2a2a;
+      --border: #333; --border-light: #444; --text: #e8e8e8; --text-secondary: #888;
+      --text-muted: #555; --accent: #4a9eff; --accent-hover: #3a8eef;
+      --accent-glow: rgba(74, 158, 255, 0.15); --success: #34d399; --error: #f87171;
+      --warning: #fbbf24; --gradient: linear-gradient(135deg, #4a9eff 0%, #a855f7 100%);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px; background: var(--bg); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; flex-shrink: 0; transition: width 0.3s;
+    }
+    .sidebar.collapsed { width: 60px; }
+    .sidebar.collapsed .sidebar-content,
+    .sidebar.collapsed .sidebar-footer-text,
+    .sidebar.collapsed .brand-text { display: none; }
+    .sidebar.collapsed .brand { justify-content: center; padding: 16px 0; }
+
+    .brand {
+      display: flex; align-items: center; gap: 12px; padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-icon {
+      width: 36px; height: 36px; background: var(--gradient); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-weight: 700;
+      font-size: 16px; color: #fff; flex-shrink: 0;
+    }
+    .brand-text h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+    .brand-text span { font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .sidebar-content::-webkit-scrollbar { width: 4px; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .section { margin-bottom: 24px; }
+    .section-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 10px;
+    }
+    .option-group { margin-bottom: 14px; }
+    .option-group label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500; }
+    select {
+      width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 12px; border-radius: 10px; font-size: 13px;
+      font-family: inherit; cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+    }
+    select:focus { outline: none; border-color: var(--accent); }
+
+    .info-card {
+      background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; margin-bottom: 12px;
+    }
+    .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-label { font-size: 12px; color: var(--text-secondary); }
+    .info-value { font-size: 12px; color: var(--text); font-family: 'SF Mono', monospace; }
+    .copy-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+      padding: 4px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit;
+    }
+    .copy-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+    .sidebar-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .toggle-btn {
+      background: transparent; border: none; color: var(--text-secondary); cursor: pointer;
+      padding: 8px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    }
+    .toggle-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+    /* Main Area */
+    .main {
+      flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden;
+    }
+
+    /* Top Bar */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .topbar-title { font-size: 14px; font-weight: 600; }
+    .topbar-badge {
+      font-size: 11px; background: var(--accent-glow); color: var(--accent);
+      padding: 3px 10px; border-radius: 20px; font-weight: 500;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+      width: 36px; height: 36px; border-radius: 10px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .icon-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-light); }
+
+    /* Gallery / Results */
+    .content-area {
+      flex: 1; overflow-y: auto; padding: 24px;
+    }
+    .content-area::-webkit-scrollbar { width: 6px; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; text-align: center; padding: 40px;
+    }
+    .empty-logo {
+      font-size: 48px; font-weight: 700; background: var(--gradient);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 16px; letter-spacing: -2px;
+    }
+    .empty-subtitle { color: var(--text-secondary); font-size: 15px; max-width: 400px; line-height: 1.6; }
+
+    .gallery {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px; align-content: start;
+    }
+    .gallery-card {
+      background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px;
+      overflow: hidden; transition: all 0.3s; animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .gallery-card:hover { border-color: var(--border-light); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+
+    .card-media {
+      width: 100%; aspect-ratio: 16/9; background: #0a0a0a; display: flex;
+      align-items: center; justify-content: center; position: relative; overflow: hidden;
+    }
+    .card-media video, .card-media img { width: 100%; height: 100%; object-fit: cover; }
+
+    .card-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .overlay-text { font-size: 13px; color: var(--text-secondary); }
+    .progress-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: var(--border); }
+    .progress-fill { height: 100%; background: var(--gradient); transition: width 0.3s; border-radius: 3px; }
+
+    .card-body { padding: 16px; }
+    .card-prompt {
+      font-size: 14px; color: var(--text); margin-bottom: 12px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .tag {
+      font-size: 11px; background: var(--bg-tertiary); color: var(--text-secondary);
+      padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);
+    }
+    .tag i { margin-right: 4px; font-size: 10px; }
+    .card-actions { display: flex; gap: 8px; }
+    .card-btn {
+      flex: 1; padding: 8px 12px; border: none; border-radius: 10px; font-size: 12px;
+      font-weight: 500; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; gap: 6px; font-family: inherit; transition: all 0.2s;
+    }
+    .btn-download { background: var(--accent); color: #fff; }
+    .btn-download:hover { background: var(--accent-hover); }
+    .btn-delete { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); }
+    .btn-delete:hover { background: rgba(248, 113, 113, 0.1); color: var(--error); border-color: var(--error); }
+
+    /* Composer / Input Area */
+    .composer {
+      padding: 16px 24px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .composer-box {
+      background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 20px;
+      padding: 12px 16px; display: flex; flex-direction: column; transition: border-color 0.2s;
+    }
+    .composer-box:focus-within { border-color: var(--accent); }
+
+    .composer-top { display: flex; align-items: flex-end; gap: 12px; }
+    .composer-input {
+      flex: 1; background: transparent; border: none; color: var(--text); font-size: 14px;
+      font-family: inherit; resize: none; outline: none; min-height: 24px; max-height: 120px;
+      line-height: 1.5;
+    }
+    .composer-input::placeholder { color: var(--text-muted); }
+
+    .composer-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .composer-btn {
+      background: transparent; border: none; color: var(--text-muted); width: 36px; height: 36px;
+      border-radius: 10px; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; transition: all 0.2s; font-size: 15px;
+    }
+    .composer-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+    .send-btn {
+      background: var(--text) !important; color: var(--bg) !important; border-radius: 50%;
+      width: 36px; height: 36px;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .composer-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .composer-meta { display: flex; align-items: center; gap: 12px; }
+    .model-pill {
+      display: flex; align-items: center; gap: 6px; background: var(--bg-tertiary);
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; color: var(--text-secondary);
+      cursor: pointer; border: 1px solid var(--border); transition: all 0.2s;
+    }
+    .model-pill:hover { border-color: var(--border-light); color: var(--text); }
+    .model-pill i { font-size: 10px; }
+    .char-count { font-size: 12px; color: var(--text-muted); }
+    .char-count.warning { color: var(--warning); }
+    .char-count.error { color: var(--error); }
+
+    /* Upload preview */
+    .upload-preview-bar {
+      display: none; align-items: center; gap: 10px; margin-bottom: 10px;
+      padding: 8px 12px; background: var(--bg-tertiary); border-radius: 12px;
+    }
+    .upload-preview-bar.active { display: flex; }
+    .upload-thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+    .upload-info-text { flex: 1; font-size: 13px; color: var(--text-secondary); }
+    .upload-remove {
+      background: transparent; border: none; color: var(--text-muted); cursor: pointer;
+      padding: 6px; border-radius: 6px;
+    }
+    .upload-remove:hover { color: var(--error); background: rgba(248, 113, 113, 0.1); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text);
+      padding: 12px 24px; border-radius: 12px; font-size: 13px; z-index: 1000;
+      transition: transform 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Model Dropdown */
+    .model-dropdown {
+      display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 8px;
+      background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px;
+      padding: 6px; min-width: 240px; z-index: 100; box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+    }
+    .model-dropdown.open { display: block; }
+    .model-option {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .model-option:hover { background: var(--bg-hover); }
+    .model-option.active { background: var(--accent-glow); }
+    .model-option-icon { width: 32px; height: 32px; background: var(--bg-tertiary); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--accent); }
+    .model-option-text { flex: 1; }
+    .model-option-name { font-size: 13px; font-weight: 500; }
+    .model-option-desc { font-size: 11px; color: var(--text-muted); }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; gap: 16px; padding: 8px 16px; background: var(--bg-tertiary);
+      border-radius: 12px; margin-bottom: 20px;
+    }
+    .stat-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+    .stat-value { font-weight: 600; color: var(--text); }
+
+    /* Hidden file input */
+    #file-input { display: none; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .gallery { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-icon">X</div>
+      <div class="brand-text">
+        <h1>Ximagine Pro</h1>
+        <span>Video Generation Engine</span>
+      </div>
+    </div>
+    <div class="sidebar-content">
+      <div class="section">
+        <div class="section-label">API Access</div>
+        <div class="info-card">
+          <div class="info-row">
+            <span class="info-label">Endpoint</span>
+            <button class="copy-btn" onclick="copyText(API_ORIGIN)"><i class="fas fa-copy"></i> Copy</button>
+          </div>
+          <div class="info-row">
+            <span class="info-value" id="display-origin"></span>
+          </div>
+          <div class="info-row" style="margin-top:8px">
+            <span class="info-label">API Key</span>
+            <button class="copy-btn" onclick="copyText(API_KEY)"><i class="fas fa-copy"></i> Copy</button>
+          </div>
+          <div class="info-row">
+            <span class="info-value" id="display-key"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Generation Settings</div>
+        <div class="option-group">
+          <label>Aspect Ratio</label>
+          <select id="ratio">
+            <option value="1:1">1:1 Square</option>
+            <option value="16:9" selected>16:9 Landscape</option>
+            <option value="9:16">9:16 Portrait</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Video Style</label>
+          <select id="video-mode">
+            <option value="normal">Standard Realistic</option>
+            <option value="fun">Fun Cartoon</option>
+            <option value="spicy">Spicy Mode</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Session Stats</div>
+        <div class="info-card">
+          <div class="info-row">
+            <span class="info-label">Total</span>
+            <span class="info-value" id="stat-total">0</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Success</span>
+            <span class="info-value" style="color:var(--success)" id="stat-success">0</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Failed</span>
+            <span class="info-value" style="color:var(--error)" id="stat-failed">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="toggle-btn" onclick="toggleSidebar()" title="Collapse sidebar">
+        <i class="fas fa-bars" style="font-size:16px"></i>
+      </button>
+      <span class="sidebar-footer-text" style="font-size:12px;color:var(--text-muted)">v2.2.0</span>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Studio</span>
+        <span class="topbar-badge"><i class="fas fa-bolt"></i> Grok Engine</span>
+      </div>
+      <div class="topbar-right">
+        <button class="icon-btn" onclick="clearGallery()" title="Clear all"><i class="fas fa-trash-alt"></i></button>
+        <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme"><i class="fas fa-moon" id="theme-icon"></i></button>
+      </div>
+    </div>
+
+    <!-- Content / Gallery -->
+    <div class="content-area" id="content-area">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-logo">Ximagine</div>
+        <p class="empty-subtitle">Describe anything you can imagine. I'll generate a video or image for you using the Grok engine.</p>
+      </div>
+      <div class="gallery" id="gallery" style="display:none"></div>
+    </div>
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="composer-box">
+        <div class="upload-preview-bar" id="upload-preview">
+          <img class="upload-thumb" id="upload-thumb" src="" alt="preview">
+          <span class="upload-info-text">Reference image attached</span>
+          <button class="upload-remove" onclick="removeUpload()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="composer-top">
+          <textarea class="composer-input" id="prompt" rows="1" maxlength="1800"
+            placeholder="Describe a video to generate..." oninput="autoResize(this); updateCharCount()"></textarea>
+          <div class="composer-actions">
+            <button class="composer-btn" onclick="document.getElementById('file-input').click()" title="Attach image">
+              <i class="fas fa-paperclip"></i>
+            </button>
+            <button class="send-btn" id="btn-send" onclick="submitTask()" title="Generate">
+              <i class="fas fa-arrow-up"></i>
+            </button>
+          </div>
+        </div>
+        <div class="composer-bottom">
+          <div class="composer-meta" style="position:relative">
+            <div class="model-pill" id="model-pill" onclick="toggleModelDropdown()">
+              <i class="fas fa-film"></i>
+              <span id="model-pill-text">Standard Realistic</span>
+              <i class="fas fa-chevron-down"></i>
+            </div>
+            <div class="model-dropdown" id="model-dropdown">
+              <div class="model-option active" data-model="grok-video-normal" onclick="selectModel(this)">
+                <div class="model-option-icon"><i class="fas fa-film"></i></div>
+                <div class="model-option-text">
+                  <div class="model-option-name">Standard Realistic</div>
+                  <div class="model-option-desc">High quality realistic video</div>
+                </div>
+              </div>
+              <div class="model-option" data-model="grok-video-fun" onclick="selectModel(this)">
+                <div class="model-option-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                <div class="model-option-text">
+                  <div class="model-option-name">Fun Cartoon</div>
+                  <div class="model-option-desc">Animated cartoon style</div>
+                </div>
+              </div>
+              <div class="model-option" data-model="grok-video-spicy" onclick="selectModel(this)">
+                <div class="model-option-icon"><i class="fas fa-fire"></i></div>
+                <div class="model-option-text">
+                  <div class="model-option-name">Spicy Mode</div>
+                  <div class="model-option-desc">Creative unrestricted generation</div>
+                </div>
+              </div>
+              <div class="model-option" data-model="grok-image" onclick="selectModel(this)">
+                <div class="model-option-icon"><i class="fas fa-image"></i></div>
+                <div class="model-option-text">
+                  <div class="model-option-name">Text to Image</div>
+                  <div class="model-option-desc">Generate images from text</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="char-count" id="char-count">0 / 1800</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*" onchange="handleFileUpload(event)">
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // --- Configuration ---
+    const API_ORIGIN = window.location.origin;
+    const API_KEY = "1";
+    let uploadedImageUrl = null;
+    let selectedModel = "grok-video-normal";
+    let tasks = [];
+    let history = [];
+    let stats = { total: 0, success: 0, failed: 0 };
+
+    // --- Init ---
+    document.getElementById('display-origin').textContent = API_ORIGIN;
+    document.getElementById('display-key').textContent = API_KEY;
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    function updateCharCount() {
+      const len = document.getElementById('prompt').value.length;
+      const el = document.getElementById('char-count');
+      el.textContent = len + ' / 1800';
+      el.classList.remove('warning', 'error');
+      if (len >= 1800) el.classList.add('error');
+      else if (len >= 1600) el.classList.add('warning');
+    }
+
+    function updateStats() {
+      document.getElementById('stat-total').textContent = stats.total;
+      document.getElementById('stat-success').textContent = stats.success;
+      document.getElementById('stat-failed').textContent = stats.failed;
+    }
+
+    // --- Toast ---
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // --- Copy ---
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+    }
+
+    // --- Sidebar ---
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+
+    // --- Theme ---
+    function toggleTheme() {
+      // Future: light/dark toggle
+      showToast('Dark mode is the only vibe');
+    }
+
+    // --- Model Dropdown ---
+    function toggleModelDropdown() {
+      document.getElementById('model-dropdown').classList.toggle('open');
+    }
+    function selectModel(el) {
+      document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
+      el.classList.add('active');
+      selectedModel = el.dataset.model;
+      document.getElementById('model-pill-text').textContent = el.querySelector('.model-option-name').textContent;
+      document.getElementById('model-dropdown').classList.remove('open');
+
+      // Sync sidebar selects
+      const style = el.dataset.model.replace('grok-video-', '').replace('grok-', '');
+      const modeSelect = document.getElementById('video-mode');
+      if (modeSelect.querySelector(`option[value="${style}"]`)) modeSelect.value = style;
+    }
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.composer-meta')) {
+        document.getElementById('model-dropdown').classList.remove('open');
+      }
+    });
+
+    // Sync sidebar selects to model
+    document.getElementById('video-mode').addEventListener('change', function() {
+      const model = 'grok-video-' + this.value;
+      selectedModel = model;
+      const opt = document.querySelector(`.model-option[data-model="${model}"]`);
+      if (opt) {
+        document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        document.getElementById('model-pill-text').textContent = opt.querySelector('.model-option-name').textContent;
+      }
+    });
+
+    // --- File Upload ---
+    async function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast('Uploading image...');
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(API_ORIGIN + '/v1/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success && data.data && data.data.url) {
+          uploadedImageUrl = data.data.url;
+          document.getElementById('upload-thumb').src = uploadedImageUrl;
+          document.getElementById('upload-preview').classList.add('active');
+          showToast('Image attached');
+        } else {
+          throw new Error(data.error || 'Upload failed');
+        }
+      } catch (err) {
+        showToast('Upload failed: ' + err.message);
+      }
+      e.target.value = '';
+    }
+
+    function removeUpload() {
+      uploadedImageUrl = null;
+      document.getElementById('upload-preview').classList.remove('active');
+      document.getElementById('upload-thumb').src = '';
+      document.getElementById('file-input').value = '';
+    }
+
+    // --- Enter key to submit ---
+    document.getElementById('prompt').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitTask();
+      }
+    });
+
+    // --- Gallery Rendering ---
+    function renderGallery() {
+      const gallery = document.getElementById('gallery');
+      const empty = document.getElementById('empty-state');
+      const allItems = [...tasks, ...history];
+
+      if (allItems.length === 0) {
+        gallery.style.display = 'none';
+        empty.style.display = 'flex';
+        return;
+      }
+      gallery.style.display = 'grid';
+      empty.style.display = 'none';
+      gallery.innerHTML = '';
+
+      allItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'gallery-card';
+
+        let media = '';
+        if (item.status === 'completed') {
+          const url = (item.urls && item.urls[0]) || item.videoUrl || '';
+          if (selectedModel === 'grok-image' || item.model === 'grok-image') {
+            media = `<img src="${url}" alt="Generated image">`;
+          } else {
+            media = `<video src="${url}" controls loop playsinline></video>`;
+          }
+        } else if (item.status === 'failed') {
+          media = `<div class="card-overlay"><i class="fas fa-exclamation-triangle" style="font-size:24px;color:var(--error)"></i><div class="overlay-text">Generation failed</div></div>`;
+        } else {
+          media = `<div class="card-overlay"><div class="spinner"></div><div class="overlay-text">${item.status === 'pending' ? 'Initializing...' : 'Generating...'} Poll #${item.pollCount || 0}</div></div><div class="progress-bar"><div class="progress-fill" style="width:${item.progress || 0}%"></div></div>`;
+          if (item.refImage) media = `<img src="${item.refImage}" style="opacity:0.2;position:absolute;width:100%;height:100%;object-fit:cover">` + media;
+        }
+
+        let actions = '';
+        if (item.status === 'completed' && item.urls && item.urls.length > 0) {
+          actions = `<div class="card-actions"><button class="card-btn btn-download" onclick="downloadItem('${item.urls[0]}')"><i class="fas fa-download"></i> Download</button><button class="card-btn btn-delete" onclick="deleteItem('${item.id}')"><i class="fas fa-trash"></i></button></div>`;
+        } else if (item.status === 'failed') {
+          actions = `<div class="card-actions"><button class="card-btn btn-delete" onclick="deleteItem('${item.id}')" style="flex:1"><i class="fas fa-trash"></i> Remove</button></div>`;
+        }
+
+        card.innerHTML = `
+          <div class="card-media" id="media-${item.id}">${media}</div>
+          <div class="card-body">
+            <div class="card-prompt">${item.prompt.replace(/</g, '&lt;')}</div>
+            <div class="card-tags">
+              <span class="tag"><i class="fas fa-film"></i>${item.model || selectedModel}</span>
+              <span class="tag"><i class="fas fa-expand"></i>${item.ratio}</span>
+            </div>
+            ${actions}
+          </div>`;
+        gallery.appendChild(card);
+      });
+    }
+
+    // --- Submit Task ---
+    async function submitTask() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) return showToast('Enter a prompt to generate');
+      if (prompt.length > 1800) return showToast('Prompt exceeds 1800 characters');
+
+      const ratio = document.getElementById('ratio').value;
+      let modelId = selectedModel;
+      if (uploadedImageUrl) modelId = 'grok-video-image';
+
+      const taskId = 'task_' + Date.now();
+      const task = {
+        id: taskId, status: 'pending', prompt, model: modelId,
+        ratio, refImage: uploadedImageUrl,
+        date: new Date().toLocaleString(), progress: 0, pollCount: 0
+      };
+
+      tasks.unshift(task);
+      stats.total++;
+      updateStats();
+      renderGallery();
+
+      // Clear input
+      document.getElementById('prompt').value = '';
+      autoResize(document.getElementById('prompt'));
+      updateCharCount();
+      removeUpload();
+
+      processTask(task);
+    }
+
+    async function processTask(task) {
+      try {
+        task.status = 'processing';
+        renderGallery();
+
+        const payload = {
+          model: task.model,
+          messages: [{ role: 'user', content: JSON.stringify({
+            prompt: task.prompt,
+            aspectRatio: task.ratio,
+            clientPollMode: true,
+            imageUrls: task.refImage ? [task.refImage] : []
+          }) }],
+          stream: true
+        };
+
+        const res = await fetch(API_ORIGIN + '/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let realTaskId = null, uniqueId = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const match = buffer.match(/\[TASK_ID:(.*?)\|UID:(.*?)\|TYPE:(.*?)\]/);
+          if (match) { realTaskId = match[1]; uniqueId = match[2]; break; }
+        }
+
+        if (!realTaskId) throw new Error('Could not retrieve task ID from server');
+        pollTaskStatus(task, realTaskId, uniqueId);
+
+      } catch (e) {
+        task.status = 'failed';
+        stats.failed++;
+        updateStats();
+        renderGallery();
+        showToast('Failed: ' + e.message);
+      }
+    }
+
+    function pollTaskStatus(task, realTaskId, uniqueId) {
+      let count = 0;
+      const interval = setInterval(async () => {
+        count++;
+        task.pollCount = count;
+        if (task.progress < 95) { task.progress += 1; updateTaskProgress(task); }
+
+        try {
+          const res = await fetch(
+            API_ORIGIN + '/v1/query/status?taskId=' + realTaskId + '&uniqueId=' + uniqueId + '&type=video',
+            { headers: { 'Authorization': 'Bearer ' + API_KEY } }
+          );
+          const data = await res.json();
+
+          if (data.status === 'completed' || data.videoUrl || (data.urls && data.urls.length > 0)) {
+            clearInterval(interval);
+            task.status = 'completed';
+            task.progress = 100;
+            task.urls = data.urls || (data.videoUrl ? [data.videoUrl] : []);
+            stats.success++;
+            updateStats();
+            moveToHistory(task);
+          } else if (data.status === 'failed') {
+            clearInterval(interval);
+            task.status = 'failed';
+            stats.failed++;
+            updateStats();
+            renderGallery();
+            showToast('Generation failed: ' + (data.error || 'Unknown error'));
+          } else if (data.progress) {
+            task.progress = data.progress;
+            updateTaskProgress(task);
+          }
+        } catch (e) {
+          if (count > 60) {
+            clearInterval(interval);
+            task.status = 'failed';
+            stats.failed++;
+            updateStats();
+            renderGallery();
+            showToast('Generation timed out');
+          }
+        }
+      }, 2000);
+    }
+
+    function updateTaskProgress(task) {
+      const el = document.getElementById('media-' + task.id);
+      if (!el) return;
+      const fill = el.querySelector('.progress-fill');
+      const text = el.querySelector('.overlay-text');
+      if (fill) fill.style.width = task.progress + '%';
+      if (text) text.textContent = `Generating... Poll #${task.pollCount}`;
+    }
+
+    function moveToHistory(task) {
+      tasks = tasks.filter(t => t.id !== task.id);
+      history.unshift({
+        id: 'done_' + Date.now(), status: 'completed', prompt: task.prompt,
+        urls: task.urls, date: task.date, model: task.model, ratio: task.ratio
+      });
+      renderGallery();
+      showToast('Generation complete!');
+    }
+
+    function deleteItem(id) {
+      tasks = tasks.filter(t => t.id !== id);
+      history = history.filter(h => h.id !== id);
+      renderGallery();
+      showToast('Removed');
+    }
+
+    function downloadItem(url) {
+      const proxyUrl = API_ORIGIN + '/v1/proxy/download?url=' + encodeURIComponent(url);
+      window.open(proxyUrl, '_blank');
+      showToast('Download started');
+    }
+
+    function clearGallery() {
+      if (tasks.length === 0 && history.length === 0) return;
+      if (!confirm('Clear all items?')) return;
+      tasks = [];
+      history = [];
+      renderGallery();
+      showToast('Gallery cleared');
+    }
+
+    // Init
+    renderGallery();
+  </script>
+</body>
+</html>

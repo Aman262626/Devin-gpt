@@ -48,7 +48,7 @@ CONFIG = {
     }
 }
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
@@ -517,10 +517,13 @@ def chat_completions():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 # =================================================================
-# 5. Dashboard UI - Cyberpunk V4
+# 5. Dashboard UI - Grok Style
 # =================================================================
 @app.route('/')
 def index():
+    return app.send_static_file('index.html')
+
+def _unused_old_ui():
     origin = f"http://127.0.0.1:{CONFIG['PORT']}"
     api_key = CONFIG["API_KEY"]
     version = CONFIG["VERSION"]
